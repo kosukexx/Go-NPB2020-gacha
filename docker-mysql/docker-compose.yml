@@ -1,0 +1,17 @@
+version: "3"
+services:
+  db:
+    image: mysql
+    volumes:
+      - ./mysql/db/data:/var/lib/mysql
+      - ./mysql/db/my.cnf:/etc/mysql/conf.d
+      # 初期データ投入のため記述する
+      - ./mysql/db/initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=sample
+      - TZ=${TZ}
+    container_name: mysql
+    
