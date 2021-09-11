@@ -1,17 +1,16 @@
 package main
 
 import (
-	"database/sql"
-	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
-	"math/rand"
-	"net/http"
-	"strconv"
-
-	//"strconv"
-	"time"
+	"database/sql"//DB周り，もっと使いやすいフレームワークがあるらしいが今回は標準パッケージで
+	"github.com/gin-gonic/gin"//webフレームワーク
+	_ "github.com/go-sql-driver/mysql"//mysql使うとき
+	"math/rand"//乱数生成時
+	"net/http"//標準パッケージ
+	"strconv"//strをintにするときに使う
+	"time"//乱数生成時
 )
-type User struct {
+
+type Player struct {
 	ID   int
 	Name string
 	Rank string
@@ -19,6 +18,12 @@ type User struct {
 	HR float32
 	OPS float32
 	SB float32
+}
+//ユーザ情報を使うとき用，まだ実装できてない
+type User struct{
+	ID int
+	Name string
+	Jewel int
 }
 
 type receiveNumber struct {
@@ -34,24 +39,24 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	defer db.Close()
+	defer db.Close()//どこで書いても関数の最後に実行される．基本db:=hogeの後ろ
 
-	//DBからデータ取得
+	//DBからデータ取得，本当は都度必要なところだけ取り出したいけど今回は全部取り出す
 	rows, err := db.Query("SELECT * FROM players")
 	if err != nil {
 		panic(err.Error())
 	}
-	defer rows.Close()
+	defer rows.Close()//どこで書いても関数の最後に実行される．基本db:=hogeの後ろ
 
-	users :=[]User{}
+	players :=[]Player{}
 	for rows.Next() {
-		var user User
-		err := rows.Scan(&user.ID, &user.Name, &user.Rank, &user.average,&user.HR,&user.OPS,&user.SB)
+		var player Player
+		err := rows.Scan(&player.ID, &player.Name, &player.Rank, &player.average,&player.HR,&player.OPS,&player.SB)
 		if err != nil {
 			panic(err.Error())
 		}
-		users = append (users, user)
-		//fmt.Println(user.ID, user.Name, user.Rank, user.average,user.HR,user.OPS,user.SB)
+		players = append (players, player)
+		//fmt.Println(&player.ID, &player.Name, &player.Rank, &player.average,&player.HR,&player.OPS,&player.SB)
 
 	}
 	err = rows.Err()
@@ -60,65 +65,61 @@ func main() {
 	}
 
 	r := gin.Default()
-	r.LoadHTMLGlob("templates/*.html")
+	r.LoadHTMLGlob("templates/index.html")
 
 	r.GET("/", func(c *gin.Context){
 		c.HTML(http.StatusOK, "index.html", gin.H{"title":"プロ野球有名選手ガチャ","message":"何回引く？"})
 	})
 
 	r.POST("/",func(c *gin.Context){
-		//number:=c.PostForm("field")
 		number,_:=strconv.Atoi(c.PostForm("field"))//フォームに入力された数字はstringとして読み込まれてるから，intにパースしてあげる
-		if number==0{
-			var hoge receiveNumber
-			c.BindJSON(&hoge)
-			number,_=strconv.Atoi(hoge.Number)
-		}
-		reality:=[]string{}
-		var getNumber []int
-		for i:=0;i<number;i++{
-			reality=append(reality,getReality())//入力された数字の回数だけ// をreality配列に入れる
+		var postJson bool//JSONで問い合わせされたときはJSONで返す，フォーム入力で問い合わせされたらHTMLで返すための変数
+		if number==0{//以下webページからの入力でなく，JSONでの問い合わせのとき(API本来の機能)，
+			var receiveNumber receiveNumber
+			c.BindJSON(&receiveNumber)
+			number,_=strconv.Atoi(receiveNumber.Number)
+			postJson=true
 		}
 
-		for i:=0;i<number;i++{//あるレアリティの時にどのidの選手を排出するか
-			switch{
+		reality:=[]string{}
+		result :=[]Player{}
+		var getNumber []int
+		for i:=0;i<number;i++{
+			reality=append(reality,getReality())//入力された数字の回数だけレアリティををreality配列に入れる
+			switch{//あるレアリティの時にどのidの選手を排出するか，ここは汎用性がないので改良したい
 			case reality[i]=="SR":
 				getNumber=append(getNumber,rand.Intn(12))
 			case reality[i]=="R":
 				getNumber=append(getNumber,12+rand.Intn(21))
-			default:
+			default://reality[i]=="N":
 				getNumber=append(getNumber,33+rand.Intn(19))
 			}
-		}
-		result :=[]User{}
-		for i:=0;i<number;i++{
-			result=append(result,users[getNumber[i]])
+			result=append(result,players[getNumber[i]])
 		}
 
 
 
-		//c.HTML(http.StatusOK, "index.html", gin.H{"title":"プロ野球有名選手ガチャ","message":reality[0]})
-		//c.HTML(http.StatusOK, "index.html", gin.H{"title":"プロ野球有名選手ガチャ","message":result})
+		if postJson==true{
+			c.JSON(200,result)//APIとしてならこれ，構造体とかスライスのまま返せる
+		}else{
+			c.HTML(http.StatusOK, "index.html", gin.H{"title":"プロ野球有名選手ガチャ","message":result})//HTML+JSONで返すとき
+		}
 
-		//data,_:=json.Marshal(users)//c.JSONで返すなら必要ないが，JSON形式にしてなんか処理するときは必要
-		c.JSON(200,result)//構造体とかスライスのまま返せる
-
+		//data,_:=json.Marshal(players)//c.JSONで返すなら必要ないが，JSON形式にしてなんか処理するときは必要
 
 
 	})
 
-
-
 	r.Run(":8080")
 
 }
+
+
 //スライスを引数で渡したときの挙動https://christina04.hatenablog.com/entry/2017/09/26/190000
 /*
-func resultNumbers(number int,users []User,reality []string) []int{
+func resultNumbers(number int,players []Player,reality []string) []int{
 	return
 }
-
-
 
 func srRankNumber(number int) int{
 		num:=rand.Intn(12)
